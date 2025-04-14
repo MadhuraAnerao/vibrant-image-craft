@@ -99,3 +99,85 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  .transition-colors {
+    @apply transition-all duration-200;
+  }
+  
+  .filter-grayscale {
+    filter: grayscale(100%);
+  }
+  
+  .filter-sepia {
+    filter: sepia(100%);
+  }
+  
+  .filter-invert {
+    filter: invert(80%);
+  }
+  
+  .filter-hue-rotate {
+    filter: hue-rotate(180deg);
+  }
+  
+  .filter-saturate {
+    filter: saturate(200%);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.2s ease-out forwards;
+}
+
+.staggered > * {
+  opacity: 0;
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.staggered > *:nth-child(1) { animation-delay: 0.1s; }
+.staggered > *:nth-child(2) { animation-delay: 0.2s; }
+.staggered > *:nth-child(3) { animation-delay: 0.3s; }
+.staggered > *:nth-child(4) { animation-delay: 0.4s; }
+.staggered > *:nth-child(5) { animation-delay: 0.5s; }

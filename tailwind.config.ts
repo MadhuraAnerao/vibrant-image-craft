@@ -61,7 +61,22 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
-				}
+				},
+        // Photo editing app colors
+        editor: {
+          dark: '#1A1F2C',
+          purple: '#7E69AB',
+          'primary-purple': '#9b87f5',
+          'light-purple': '#D6BCFA',
+          'soft-purple': '#E5DEFF'
+        },
+        filter: {
+          grayscale: '#8E9196',
+          sepia: '#FEC6A1',
+          vivid: '#8B5CF6',
+          warm: '#F97316',
+          cold: '#0EA5E9'
+        }
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
