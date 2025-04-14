@@ -10,15 +10,38 @@ interface SearchImage {
 
 /**
  * Search for images from Unsplash API
- * We're using a mock implementation here since we don't have an actual API key
+ * Using a simulated API with random Unsplash images
  */
 export const searchImages = async (query: string, page: number = 1, perPage: number = 10): Promise<SearchImage[]> => {
   try {
     if (!query) return [];
 
-    // Generate deterministic but diverse results
-    const queryHash = hashString(query);
+    // Create the Unsplash API URL with query parameters
+    const unsplashUrl = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&page=${page}&per_page=${perPage}`;
     
+    try {
+      // Try to use the Unsplash API directly
+      const response = await fetch(unsplashUrl, {
+        headers: {
+          'Authorization': 'Client-ID 6HxmcB38I4IY9avuJ_4WnXaS2GIJLAQsIk5za04jw1c' // Demo key - limited usage
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return data.results.map((item: any) => ({
+          id: item.id,
+          url: item.urls.regular,
+          title: item.description || item.alt_description || query,
+          source: 'Unsplash',
+        }));
+      }
+    } catch (error) {
+      console.log('Error fetching from Unsplash API, using fallback:', error);
+    }
+    
+    // Fallback to generate deterministic but diverse results from source.unsplash.com
+    const queryHash = hashString(query);
     const images: SearchImage[] = [];
     
     for (let i = 0; i < perPage; i++) {
@@ -28,7 +51,7 @@ export const searchImages = async (query: string, page: number = 1, perPage: num
       images.push({
         id: imageId,
         // Use unique parameters to avoid caching issues
-        url: `https://source.unsplash.com/random/800x600?${query}&sig=${imageId}`,
+        url: `https://source.unsplash.com/featured/?${encodeURIComponent(query)}&sig=${imageId}`,
         title: `${query} image ${imageNumber}`,
         source: 'Unsplash',
       });

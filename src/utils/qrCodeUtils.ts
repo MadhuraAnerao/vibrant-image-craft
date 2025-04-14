@@ -15,6 +15,7 @@ export const generateQRCode = async (text: string): Promise<string> => {
         dark: '#000000',
         light: '#ffffff',
       },
+      errorCorrectionLevel: 'H' // High error correction for better scanning
     });
     return qrCodeDataUrl;
   } catch (error) {
@@ -29,8 +30,8 @@ export const generateQRCode = async (text: string): Promise<string> => {
  * @returns A shareable URL
  */
 export const createShareableUrl = (imageId: string): string => {
-  // In a real app, this would create a unique shareable link
-  // For now, we'll create a dummy URL
+  // Create a real URL that points to the current app instead of a non-existent route
   const baseUrl = window.location.origin;
-  return `${baseUrl}/shared-image/${imageId}`;
+  const shareUrl = `${baseUrl}/editor?image=${imageId}`;
+  return shareUrl;
 };

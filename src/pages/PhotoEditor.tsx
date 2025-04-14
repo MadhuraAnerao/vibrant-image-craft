@@ -1,5 +1,6 @@
+
 import { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -40,6 +41,7 @@ const filters: ImageFilter[] = [
 const PhotoEditor = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
@@ -58,11 +60,33 @@ const PhotoEditor = () => {
   const [showQrDialog, setShowQrDialog] = useState<boolean>(false);
   const [currentImageId, setCurrentImageId] = useState<string>('');
 
-  // Get source and imageUrl from navigation state
-  const source = location.state?.source || 'gallery';
+  // Get source and imageUrl from navigation state or search params
+  const source = location.state?.source || searchParams.get('source') || 'gallery';
   const initialImageUrl = location.state?.imageUrl;
+  const sharedImageId = searchParams.get('shared');
 
   useEffect(() => {
+    // Check if we're coming from a shared link
+    if (sharedImageId) {
+      // In a real app, we would fetch the shared image from a database
+      // For now, we'll just display a placeholder or the image if available
+      toast({
+        title: "Shared Image",
+        description: "You're viewing a shared image",
+      });
+      
+      // Set a placeholder image id
+      setCurrentImageId(sharedImageId);
+      
+      // In real app, we would load the image here
+      // For now, if no image, we'll use a placeholder
+      if (!imageUrl && !initialImageUrl) {
+        setImageUrl(`https://source.unsplash.com/random/800x600?id=${sharedImageId}`);
+      }
+      
+      return;
+    }
+
     // If imageUrl is passed through state, use that
     if (initialImageUrl) {
       setImageUrl(initialImageUrl);
@@ -111,7 +135,7 @@ const PhotoEditor = () => {
     };
 
     handleImageSource();
-  }, [source, initialImageUrl]);
+  }, [source, initialImageUrl, sharedImageId]);
 
   const takePicture = async () => {
     try {
@@ -183,6 +207,14 @@ const PhotoEditor = () => {
       // Search for images
       const results = await searchImages(searchQuery);
       setSearchResults(results);
+      
+      if (results.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "No Results",
+          description: "No images found for your search",
+        });
+      }
     } catch (error) {
       console.error("Search error:", error);
       toast({
@@ -668,6 +700,26 @@ const PhotoEditor = () => {
                   <QrCode className="w-4 h-4 mr-1" />
                   Share via QR
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const shareData = {
+                      title: 'Shared Image',
+                      text: 'Check out this edited image!',
+                      url: window.location.href
+                    };
+                    
+                    if (navigator.share && navigator.canShare(shareData)) {
+                      navigator.share(shareData);
+                    } else {
+                      openShareDialog();
+                    }
+                  }}
+                >
+                  <Share className="w-4 h-4 mr-1" />
+                  Share
+                </Button>
               </div>
             </div>
             
@@ -801,6 +853,7 @@ const PhotoEditor = () => {
       <QRShareDialog 
         isOpen={showQrDialog}
         imageId={currentImageId}
+        imageUrl={imageUrl}
         onClose={() => setShowQrDialog(false)}
       />
     </div>

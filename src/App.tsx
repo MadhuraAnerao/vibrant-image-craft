@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { useAuth } from "./contexts/AuthContext";
 import AuthPage from "./pages/AuthPage";
@@ -41,6 +41,19 @@ const ProtectedRoute = ({
   return <>{element}</>;
 };
 
+// Shared image route component
+const SharedImageRoute = () => {
+  const [searchParams] = useSearchParams();
+  const imageId = searchParams.get('image');
+  
+  // If we have an image parameter, redirect to editor with that image
+  if (imageId) {
+    return <Navigate to={`/editor?shared=${imageId}`} replace />;
+  }
+  
+  return <Navigate to="/" replace />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -55,6 +68,7 @@ const App = () => (
             <Route path="/editor" element={<ProtectedRoute element={<PhotoEditor />} />} />
             <Route path="/camera" element={<ProtectedRoute element={<CameraPage />} />} />
             <Route path="/vault" element={<ProtectedRoute element={<ImageVault />} />} />
+            <Route path="/shared-image/:id" element={<SharedImageRoute />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
