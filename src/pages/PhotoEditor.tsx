@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Camera } from '@capacitor/camera';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -17,7 +17,8 @@ import {
   Sticker,
   Save,
   ArrowLeft,
-  Search
+  Search,
+  Camera as CameraIcon
 } from 'lucide-react';
 import { ImageFilter } from '@/types/editor';
 
@@ -91,7 +92,8 @@ const PhotoEditor = () => {
       const image = await Camera.getPhoto({
         quality: 90,
         allowEditing: false,
-        resultType: 'uri'
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Camera
       });
       
       if (image.webPath) {
@@ -114,8 +116,8 @@ const PhotoEditor = () => {
       const image = await Camera.getPhoto({
         quality: 90,
         allowEditing: false,
-        source: 'photos',
-        resultType: 'uri'
+        source: CameraSource.Photos,
+        resultType: CameraResultType.Uri
       });
       
       if (image.webPath) {
@@ -433,7 +435,7 @@ const PhotoEditor = () => {
               <p className="text-gray-300 mb-6">No image selected</p>
               <div className="space-x-4">
                 <Button onClick={takePicture}>
-                  <Camera className="w-5 h-5 mr-2" />
+                  <CameraIcon className="w-5 h-5 mr-2" />
                   Take Photo
                 </Button>
                 <Button variant="outline" onClick={selectFromGallery}>
