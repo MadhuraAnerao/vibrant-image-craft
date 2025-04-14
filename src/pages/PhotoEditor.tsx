@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
-import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -18,9 +17,11 @@ import {
   Save,
   ArrowLeft,
   Search,
-  Camera as CameraIcon
+  Camera as CameraIcon,
+  Download
 } from 'lucide-react';
 import { ImageFilter } from '@/types/editor';
+import { saveToGallery } from '@/utils/imageUtils';
 
 // Image filters
 const filters: ImageFilter[] = [
@@ -146,20 +147,21 @@ const PhotoEditor = () => {
     }
 
     setLoading(true);
+    setSearchResults([]);
     
     try {
-      // Simulate API call for image search
-      // In a real app, you would use a real image search API like Unsplash or Pexel
+      // Use actual images instead of the dummy approach
+      const dummyResults = [
+        `https://source.unsplash.com/random/300x300?sig=1&${searchQuery}`,
+        `https://source.unsplash.com/random/300x300?sig=2&${searchQuery}`,
+        `https://source.unsplash.com/random/300x300?sig=3&${searchQuery}`,
+        `https://source.unsplash.com/random/300x300?sig=4&${searchQuery}`,
+        `https://source.unsplash.com/random/300x300?sig=5&${searchQuery}`,
+        `https://source.unsplash.com/random/300x300?sig=6&${searchQuery}`,
+      ];
+      
+      // Add a small delay to ensure images are loaded
       setTimeout(() => {
-        // Dummy results
-        const dummyResults = [
-          'https://source.unsplash.com/random/300x300?sig=1&' + searchQuery,
-          'https://source.unsplash.com/random/300x300?sig=2&' + searchQuery,
-          'https://source.unsplash.com/random/300x300?sig=3&' + searchQuery,
-          'https://source.unsplash.com/random/300x300?sig=4&' + searchQuery,
-          'https://source.unsplash.com/random/300x300?sig=5&' + searchQuery,
-          'https://source.unsplash.com/random/300x300?sig=6&' + searchQuery,
-        ];
         setSearchResults(dummyResults);
         setLoading(false);
       }, 1000);
@@ -176,7 +178,6 @@ const PhotoEditor = () => {
 
   const selectSearchImage = (url: string) => {
     setImageUrl(url);
-    setSearchResults([]);
   };
 
   const rotateImage = () => {
@@ -241,23 +242,288 @@ const PhotoEditor = () => {
       return;
     }
 
-    // In a real app, you would need to capture the edited image with all modifications
-    // This is a placeholder notification
-    toast({
-      title: "Image Saved",
-      description: "Your edited image has been saved to your gallery",
-    });
+    try {
+      if (imageContainerRef.current) {
+        const success = await saveToGallery(imageContainerRef.current);
+        if (success) {
+          toast({
+            title: "Image Saved",
+            description: "Your edited image has been saved to your gallery",
+          });
+        } else {
+          throw new Error("Failed to save image");
+        }
+      }
+    } catch (error) {
+      console.error("Save error:", error);
+      toast({
+        variant: "destructive",
+        title: "Save Error",
+        description: "Failed to save image. Please try again.",
+      });
+    }
+  };
 
-    // For a real implementation, you would use html-to-image to capture the DOM element
-    // and then use Filesystem API to save it
-    // Example:
-    // const dataUrl = await htmlToImage.toPng(imageContainerRef.current);
-    // const base64Data = dataUrl.split(',')[1];
-    // await Filesystem.writeFile({
-    //   path: `PixelCraft_${new Date().getTime()}.png`,
-    //   data: base64Data,
-    //   directory: Directory.Documents
-    // });
+  const downloadImage = async () => {
+    if (!imageUrl || !imageContainerRef.current) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No image to download",
+      });
+      return;
+    }
+
+    try {
+      // Create a canvas to capture the image with all edits
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        throw new Error("Could not create canvas context");
+      }
+      
+      // Create a temporary image to draw on canvas
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      
+      img.onload = () => {
+        // Set canvas dimensions to match image
+        canvas.width = img.width;
+        canvas.height = img.height;
+        
+        // Apply rotation if needed
+        if (rotation !== 0) {
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate((rotation * Math.PI) / 180);
+          ctx.drawImage(img, -img.width / 2, -img.height / 2);
+          ctx.restore();
+        } else {
+          ctx.drawImage(img, 0, 0);
+        }
+        
+        // Apply filter effects
+        if (activeFilter) {
+          // Apply CSS filters to canvas
+          // This is a simplified approach - for production, you'd need more complex filter implementation
+          switch (activeFilter) {
+            case 'filter-grayscale':
+              applyGrayscale(ctx, canvas);
+              break;
+            case 'filter-sepia':
+              applySepia(ctx, canvas);
+              break;
+            case 'filter-invert':
+              applyInvert(ctx, canvas);
+              break;
+            case 'filter-saturate':
+              applySaturate(ctx, canvas);
+              break;
+            case 'filter-hue-rotate':
+              applyHueRotate(ctx, canvas);
+              break;
+          }
+        }
+        
+        // Convert to data URL and trigger download
+        const dataUrl = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `edited-image-${Date.now()}.png`;
+        link.href = dataUrl;
+        link.click();
+        
+        toast({
+          title: "Image Downloaded",
+          description: "Your edited image has been downloaded",
+        });
+      };
+      
+      img.onerror = () => {
+        toast({
+          variant: "destructive",
+          title: "Download Error",
+          description: "Failed to process image for download. Try saving instead.",
+        });
+      };
+      
+      img.src = imageUrl;
+    } catch (error) {
+      console.error("Download error:", error);
+      toast({
+        variant: "destructive",
+        title: "Download Error",
+        description: "Failed to download image. Please try again.",
+      });
+    }
+  };
+  
+  // Filter functions for canvas
+  const applyGrayscale = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      data[i] = avg;
+      data[i + 1] = avg;
+      data[i + 2] = avg;
+    }
+    ctx.putImageData(imageData, 0, 0);
+  };
+  
+  const applySepia = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      data[i] = Math.min(255, (r * 0.393) + (g * 0.769) + (b * 0.189));
+      data[i + 1] = Math.min(255, (r * 0.349) + (g * 0.686) + (b * 0.168));
+      data[i + 2] = Math.min(255, (r * 0.272) + (g * 0.534) + (b * 0.131));
+    }
+    ctx.putImageData(imageData, 0, 0);
+  };
+  
+  const applyInvert = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = 255 - data[i];
+      data[i + 1] = 255 - data[i + 1];
+      data[i + 2] = 255 - data[i + 2];
+    }
+    ctx.putImageData(imageData, 0, 0);
+  };
+  
+  const applySaturate = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const saturationFactor = 1.5; // Increase saturation by 50%
+    
+    for (let i = 0; i < data.length; i += 4) {
+      // Convert RGB to HSL, adjust saturation, convert back to RGB
+      const r = data[i] / 255;
+      const g = data[i + 1] / 255;
+      const b = data[i + 2] / 255;
+      
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      
+      if (max === min) {
+        h = s = 0; // achromatic
+      } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        
+        switch (max) {
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+          default: h = (r - g) / d + 4; break;
+        }
+        
+        h /= 6;
+      }
+      
+      // Adjust saturation
+      s = Math.min(1, s * saturationFactor);
+      
+      // Convert back to RGB
+      let r1, g1, b1;
+      
+      if (s === 0) {
+        r1 = g1 = b1 = l; // achromatic
+      } else {
+        const hue2rgb = (p: number, q: number, t: number) => {
+          if (t < 0) t += 1;
+          if (t > 1) t -= 1;
+          if (t < 1/6) return p + (q - p) * 6 * t;
+          if (t < 1/2) return q;
+          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+          return p;
+        };
+        
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        
+        r1 = hue2rgb(p, q, h + 1/3);
+        g1 = hue2rgb(p, q, h);
+        b1 = hue2rgb(p, q, h - 1/3);
+      }
+      
+      // Convert back to 0-255 range
+      data[i] = Math.round(r1 * 255);
+      data[i + 1] = Math.round(g1 * 255);
+      data[i + 2] = Math.round(b1 * 255);
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
+  };
+  
+  const applyHueRotate = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const hueRotation = 60; // 60 degrees hue rotation
+    
+    for (let i = 0; i < data.length; i += 4) {
+      // Convert RGB to HSL, adjust hue, convert back to RGB
+      const r = data[i] / 255;
+      const g = data[i + 1] / 255;
+      const b = data[i + 2] / 255;
+      
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      
+      if (max === min) {
+        h = s = 0; // achromatic
+      } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        
+        switch (max) {
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+          default: h = (r - g) / d + 4; break;
+        }
+        
+        h /= 6;
+      }
+      
+      // Adjust hue (rotate)
+      h = (h + hueRotation / 360) % 1;
+      
+      // Convert back to RGB
+      let r1, g1, b1;
+      
+      if (s === 0) {
+        r1 = g1 = b1 = l; // achromatic
+      } else {
+        const hue2rgb = (p: number, q: number, t: number) => {
+          if (t < 0) t += 1;
+          if (t > 1) t -= 1;
+          if (t < 1/6) return p + (q - p) * 6 * t;
+          if (t < 1/2) return q;
+          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+          return p;
+        };
+        
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        
+        r1 = hue2rgb(p, q, h + 1/3);
+        g1 = hue2rgb(p, q, h);
+        b1 = hue2rgb(p, q, h - 1/3);
+      }
+      
+      // Convert back to 0-255 range
+      data[i] = Math.round(r1 * 255);
+      data[i + 1] = Math.round(g1 * 255);
+      data[i + 2] = Math.round(b1 * 255);
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
   };
 
   return (
@@ -269,15 +535,27 @@ const PhotoEditor = () => {
             Back
           </Button>
           <h1 className="text-2xl font-bold text-editor-primary-purple">Photo Editor</h1>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={saveImage}
-            disabled={!imageUrl}
-          >
-            <Save className="w-4 h-4 mr-2" />
-            Save
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={downloadImage}
+              disabled={!imageUrl}
+              className="flex items-center"
+            >
+              <Download className="w-4 h-4 mr-1" />
+              Download
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={saveImage}
+              disabled={!imageUrl}
+            >
+              <Save className="w-4 h-4 mr-1" />
+              Save
+            </Button>
+          </div>
         </div>
         
         {!imageUrl && source === 'search' && (
@@ -301,13 +579,18 @@ const PhotoEditor = () => {
             {searchResults.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 w-full max-w-2xl">
                 {searchResults.map((url, index) => (
-                  <img
-                    key={index}
-                    src={url}
-                    alt={`Search result ${index + 1}`}
-                    className="rounded-lg cursor-pointer hover:ring-2 hover:ring-editor-primary-purple transition-all hover:scale-105"
-                    onClick={() => selectSearchImage(url)}
-                  />
+                  <div key={index} className="relative aspect-square bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-editor-primary-purple cursor-pointer">
+                    <img
+                      src={url}
+                      alt={`Search result ${index + 1}`}
+                      className="w-full h-full object-cover"
+                      onClick={() => selectSearchImage(url)}
+                      onError={(e) => {
+                        // If image fails to load, show placeholder
+                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x300?text=Image+Not+Found';
+                      }}
+                    />
+                  </div>
                 ))}
               </div>
             )}
