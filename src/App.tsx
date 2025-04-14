@@ -10,6 +10,8 @@ import AuthPage from "./pages/AuthPage";
 import UserHomePage from "./pages/UserHomePage";
 import AdminDashboard from "./pages/AdminDashboard";
 import PhotoEditor from "./pages/PhotoEditor";
+import CameraPage from "./pages/Camera";
+import ImageVault from "./pages/ImageVault";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,6 +53,8 @@ const App = () => (
             <Route path="/" element={<ProtectedRoute element={<UserHomePage />} requiredRole="user" />} />
             <Route path="/admin" element={<ProtectedRoute element={<AdminDashboard />} requiredRole="admin" />} />
             <Route path="/editor" element={<ProtectedRoute element={<PhotoEditor />} />} />
+            <Route path="/camera" element={<ProtectedRoute element={<CameraPage />} />} />
+            <Route path="/vault" element={<ProtectedRoute element={<ImageVault />} />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

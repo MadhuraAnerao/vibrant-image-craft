@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
@@ -18,10 +17,15 @@ import {
   ArrowLeft,
   Search,
   Camera as CameraIcon,
-  Download
+  Download,
+  Share,
+  QrCode
 } from 'lucide-react';
 import { ImageFilter } from '@/types/editor';
 import { saveToGallery } from '@/utils/imageUtils';
+import { searchImages, saveSearchQuery } from '@/services/imageSearchService';
+import TiltControl from '@/components/TiltControl';
+import QRShareDialog from '@/components/QRShareDialog';
 
 // Image filters
 const filters: ImageFilter[] = [
@@ -44,17 +48,28 @@ const PhotoEditor = () => {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string>('');
   const [rotation, setRotation] = useState<number>(0);
+  const [tilt, setTilt] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [searchResults, setSearchResults] = useState<string[]>([]);
+  const [searchResults, setSearchResults] = useState<Array<{id: string, url: string, title: string}>>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>('filter');
   const [text, setText] = useState<string>('');
   const [textColor, setTextColor] = useState<string>('#ffffff');
+  const [showQrDialog, setShowQrDialog] = useState<boolean>(false);
+  const [currentImageId, setCurrentImageId] = useState<string>('');
 
-  // Get source from navigation state
+  // Get source and imageUrl from navigation state
   const source = location.state?.source || 'gallery';
+  const initialImageUrl = location.state?.imageUrl;
 
   useEffect(() => {
+    // If imageUrl is passed through state, use that
+    if (initialImageUrl) {
+      setImageUrl(initialImageUrl);
+      setCurrentImageId(`image-${Date.now()}`);
+      return;
+    }
+
     // Handle different image sources based on navigation
     const handleImageSource = async () => {
       try {
@@ -67,6 +82,16 @@ const PhotoEditor = () => {
             break;
           case 'search':
             // Don't do anything yet, user will search manually
+            break;
+          case 'vault':
+            // Image should have been passed via state
+            if (!initialImageUrl) {
+              toast({
+                variant: "destructive",
+                title: "Error",
+                description: "No image provided from vault",
+              });
+            }
             break;
           default:
             toast({
@@ -86,7 +111,7 @@ const PhotoEditor = () => {
     };
 
     handleImageSource();
-  }, [source]);
+  }, [source, initialImageUrl]);
 
   const takePicture = async () => {
     try {
@@ -99,6 +124,7 @@ const PhotoEditor = () => {
       
       if (image.webPath) {
         setImageUrl(image.webPath);
+        setCurrentImageId(`camera-${Date.now()}`);
       }
     } catch (error) {
       console.error("Camera error:", error);
@@ -123,6 +149,7 @@ const PhotoEditor = () => {
       
       if (image.webPath) {
         setImageUrl(image.webPath);
+        setCurrentImageId(`gallery-${Date.now()}`);
       }
     } catch (error) {
       console.error("Gallery error:", error);
@@ -136,7 +163,7 @@ const PhotoEditor = () => {
     }
   };
 
-  const searchImages = async () => {
+  const searchImagesHandler = async () => {
     if (!searchQuery.trim()) {
       toast({
         variant: "destructive",
@@ -150,21 +177,12 @@ const PhotoEditor = () => {
     setSearchResults([]);
     
     try {
-      // Use actual images instead of the dummy approach
-      const dummyResults = [
-        `https://source.unsplash.com/random/300x300?sig=1&${searchQuery}`,
-        `https://source.unsplash.com/random/300x300?sig=2&${searchQuery}`,
-        `https://source.unsplash.com/random/300x300?sig=3&${searchQuery}`,
-        `https://source.unsplash.com/random/300x300?sig=4&${searchQuery}`,
-        `https://source.unsplash.com/random/300x300?sig=5&${searchQuery}`,
-        `https://source.unsplash.com/random/300x300?sig=6&${searchQuery}`,
-      ];
+      // Save the search query
+      await saveSearchQuery(searchQuery);
       
-      // Add a small delay to ensure images are loaded
-      setTimeout(() => {
-        setSearchResults(dummyResults);
-        setLoading(false);
-      }, 1000);
+      // Search for images
+      const results = await searchImages(searchQuery);
+      setSearchResults(results);
     } catch (error) {
       console.error("Search error:", error);
       toast({
@@ -172,16 +190,22 @@ const PhotoEditor = () => {
         title: "Search Error",
         description: "Failed to search images. Please try again.",
       });
+    } finally {
       setLoading(false);
     }
   };
 
-  const selectSearchImage = (url: string) => {
-    setImageUrl(url);
+  const selectSearchImage = (image: {id: string, url: string}) => {
+    setImageUrl(image.url);
+    setCurrentImageId(image.id);
   };
 
   const rotateImage = () => {
     setRotation((prev) => (prev + 90) % 360);
+  };
+
+  const handleTiltChange = (value: number) => {
+    setTilt(value);
   };
 
   const addTextToImage = () => {
@@ -293,10 +317,11 @@ const PhotoEditor = () => {
         canvas.height = img.height;
         
         // Apply rotation if needed
-        if (rotation !== 0) {
+        if (rotation !== 0 || tilt !== 0) {
           ctx.save();
           ctx.translate(canvas.width / 2, canvas.height / 2);
           ctx.rotate((rotation * Math.PI) / 180);
+          ctx.rotate((tilt * Math.PI) / 180);
           ctx.drawImage(img, -img.width / 2, -img.height / 2);
           ctx.restore();
         } else {
@@ -306,7 +331,6 @@ const PhotoEditor = () => {
         // Apply filter effects
         if (activeFilter) {
           // Apply CSS filters to canvas
-          // This is a simplified approach - for production, you'd need more complex filter implementation
           switch (activeFilter) {
             case 'filter-grayscale':
               applyGrayscale(ctx, canvas);
@@ -526,6 +550,18 @@ const PhotoEditor = () => {
     ctx.putImageData(imageData, 0, 0);
   };
 
+  const openShareDialog = () => {
+    if (!imageUrl || !currentImageId) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No image to share",
+      });
+      return;
+    }
+    setShowQrDialog(true);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-editor-dark to-gray-900 text-white">
       <div className="container mx-auto px-4 py-4">
@@ -568,23 +604,31 @@ const PhotoEditor = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="bg-white/10 mr-2"
+                onKeyPress={(e) => e.key === 'Enter' && searchImagesHandler()}
               />
-              <Button onClick={searchImages} disabled={loading}>
+              <Button onClick={searchImagesHandler} disabled={loading}>
                 {loading ? 'Searching...' : 'Search'}
               </Button>
             </div>
             
-            {loading && <p>Loading images...</p>}
+            {loading && (
+              <div className="flex justify-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-editor-primary-purple"></div>
+              </div>
+            )}
             
             {searchResults.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 w-full max-w-2xl">
-                {searchResults.map((url, index) => (
-                  <div key={index} className="relative aspect-square bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-editor-primary-purple cursor-pointer">
+                {searchResults.map((image) => (
+                  <div 
+                    key={image.id} 
+                    className="relative aspect-square bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-editor-primary-purple cursor-pointer"
+                    onClick={() => selectSearchImage(image)}
+                  >
                     <img
-                      src={url}
-                      alt={`Search result ${index + 1}`}
+                      src={image.url}
+                      alt={image.title || `Search result`}
                       className="w-full h-full object-cover"
-                      onClick={() => selectSearchImage(url)}
                       onError={(e) => {
                         // If image fails to load, show placeholder
                         (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x300?text=Image+Not+Found';
@@ -608,8 +652,22 @@ const PhotoEditor = () => {
                   src={imageUrl}
                   alt="Editing image"
                   className={`max-h-full max-w-full object-contain ${activeFilter}`}
-                  style={{ transform: `rotate(${rotation}deg)` }}
+                  style={{ 
+                    transform: `rotate(${rotation}deg) rotate3d(1, 0, 0, ${tilt}deg)` 
+                  }}
                 />
+              </div>
+              
+              <div className="flex mt-4 space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={openShareDialog} 
+                  disabled={!imageUrl}
+                >
+                  <QrCode className="w-4 h-4 mr-1" />
+                  Share via QR
+                </Button>
               </div>
             </div>
             
@@ -620,7 +678,7 @@ const PhotoEditor = () => {
                 onValueChange={setActiveTab}
                 className="w-full"
               >
-                <TabsList className="grid grid-cols-4 mb-4">
+                <TabsList className="grid grid-cols-5 mb-4">
                   <TabsTrigger value="filter">
                     <Palette className="h-4 w-4 mr-1" />
                     <span className="hidden sm:inline">Filters</span>
@@ -628,6 +686,10 @@ const PhotoEditor = () => {
                   <TabsTrigger value="rotate">
                     <RotateCw className="h-4 w-4 mr-1" />
                     <span className="hidden sm:inline">Rotate</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="tilt">
+                    <RotateCw className="h-4 w-4 mr-1 transform rotate-90" />
+                    <span className="hidden sm:inline">Tilt</span>
                   </TabsTrigger>
                   <TabsTrigger value="text">
                     <Type className="h-4 w-4 mr-1" />
@@ -663,6 +725,10 @@ const PhotoEditor = () => {
                     </Button>
                     <div className="text-sm">{rotation}°</div>
                   </div>
+                </TabsContent>
+                
+                <TabsContent value="tilt" className="space-y-4">
+                  <TiltControl onChange={handleTiltChange} />
                 </TabsContent>
                 
                 <TabsContent value="text" className="space-y-4">
@@ -730,6 +796,13 @@ const PhotoEditor = () => {
           )
         )}
       </div>
+      
+      {/* QR Code Share Dialog */}
+      <QRShareDialog 
+        isOpen={showQrDialog}
+        imageId={currentImageId}
+        onClose={() => setShowQrDialog(false)}
+      />
     </div>
   );
 };
